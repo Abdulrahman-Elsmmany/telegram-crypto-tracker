@@ -66,57 +66,69 @@ async def web_scraping(link, user_agents):
         '₀': '0', '₁': '1', '₂': '2', '₃': '3', '₄': '4',
         '₅': '5', '₆': '6', '₇': '7', '₈': '8', '₉': '9'
     }
+    
+    price = None  # Initialize price variable
+    
     async with async_playwright() as p:
         browser = await p.chromium.launch(headless=True)
         context = await browser.new_context(user_agent=random.choice(user_agents))
         page = await context.new_page()
 
-        # Emulate human-like behavior
-        await page.set_viewport_size({"width": 1920, "height": 1080})
-
-        await page.goto(link)
-
-        # Wait for a random time interval (2-5 seconds) after the page has loaded
-        await asyncio.sleep(random.uniform(2, 5))
-
-        # Check for the pop-up and click "Got it" if it appears
         try:
-            got_it_button = page.locator('text="Got it"')
-            await got_it_button.click(timeout=5000)  # 5 second timeout
-            logging.info("Pop-up appeared and 'Got it' button was clicked.")
-        except TimeoutError:
-            logging.info("Pop-up did not appear or 'Got it' button was not found.")
-        except Exception as e:
-            logging.error(f"Error when trying to click 'Got it' button: {e}")
-        
-        # Updated selector to use the parent class and get first child
-            parent_element = await page.wait_for_selector('.css-1lqrh8c', timeout=5000)
-            if parent_element:
-                # Get the first child div
-                price_element = await parent_element.query_selector('div:first-child')
-                
-                if price_element:
-                    price_text = await price_element.inner_text()
-                    logging.info(f"Raw price text: {price_text}")
-                    
-                    # Remove the dollar sign and convert subscript digits
-                    price_text = price_text.replace('$', '')
-                    for subscript, digit in subscript_map.items():
-                        price_text = price_text.replace(subscript, digit)
-                    
-                    price = float(price_text)
-                    
-                    logging.info(f"The Price is: {price}")
+            # Emulate human-like behavior
+            await page.set_viewport_size({"width": 1920, "height": 1080})
+            await page.goto(link)
+            await asyncio.sleep(random.uniform(2, 5))
 
-        # Take screenshot
-        screenshot_path = os.getenv('SCREENSHOT_PATH', 'last.jpg')
-        try:
-            await page.screenshot(path=screenshot_path, full_page=True)
-            logging.info(f"Screenshot saved successfully at {screenshot_path}")
-        except Exception as e:
-            logging.error(f"Error saving screenshot: {e}")
+            # Handle pop-up
+            try:
+                got_it_button = page.locator('text="Got it"')
+                await got_it_button.click(timeout=5000)
+                logging.info("Pop-up appeared and 'Got it' button was clicked.")
+            except Exception as e:
+                logging.info(f"Pop-up handling: {str(e)}")
 
-        await browser.close()
+            # Wait for price element with proper error handling
+            try:
+                parent_element = await page.wait_for_selector('.css-1lqrh8c', timeout=10000)
+                if parent_element:
+                    price_element = await parent_element.query_selector('div:first-child')
+                    
+                    if price_element:
+                        price_text = await price_element.inner_text()
+                        logging.info(f"Raw price text: {price_text}")
+                        
+                        # Remove the dollar sign and convert subscript digits
+                        price_text = price_text.replace('$', '')
+                        for subscript, digit in subscript_map.items():
+                            price_text = price_text.replace(subscript, digit)
+                        
+                        try:
+                            price = float(price_text)
+                            logging.info(f"Successfully extracted price: {price}")
+                        except ValueError as e:
+                            logging.error(f"Error converting price text to float: {e}")
+                            price = None
+                    else:
+                        logging.error("Price element not found within parent")
+                else:
+                    logging.error("Parent element not found")
+            except Exception as e:
+                logging.error(f"Error extracting price: {e}")
+                price = None
+
+            # Take screenshot
+            screenshot_path = os.getenv('SCREENSHOT_PATH', 'last.jpg')
+            try:
+                await page.screenshot(path=screenshot_path, full_page=True)
+                logging.info(f"Screenshot saved successfully at {screenshot_path}")
+            except Exception as e:
+                logging.error(f"Error saving screenshot: {e}")
+
+        except Exception as e:
+            logging.error(f"General error during web scraping: {e}")
+        finally:
+            await browser.close()
 
     return price
 
