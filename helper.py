@@ -61,11 +61,43 @@ def generat_user_agents(count):
 
 
 async def web_scraping(link, user_agents):
-    # Mapping of subscript digits to regular digits
-    subscript_map = {
-        '₀': '0', '₁': '1', '₂': '2', '₃': '3', '₄': '4',
-        '₅': '5', '₆': '6', '₇': '7', '₈': '8', '₉': '9'
-    }
+    def process_subscript_number(price_text):
+        """
+        Process a number with subscript digits by replacing them with the appropriate
+        number of zeros after the decimal point.
+        Example: 0.0₅8372 becomes 0.0000008372
+        """
+        subscript_map = {
+            '₀': 0, '₁': 1, '₂': 2, '₃': 3, '₄': 4,
+            '₅': 5, '₆': 6, '₇': 7, '₈': 8, '₉': 9
+        }
+        
+        # Find the decimal point position
+        decimal_pos = price_text.find('.')
+        if decimal_pos == -1:
+            return price_text
+        
+        # Split the number into parts before and after decimal
+        before_decimal = price_text[:decimal_pos]
+        after_decimal = price_text[decimal_pos + 1:]
+        
+        # Process the part after decimal
+        result_after_decimal = ""
+        i = 0
+        while i < len(after_decimal):
+            if after_decimal[i] in subscript_map:
+                # Add the specified number of zeros
+                zeros_count = subscript_map[after_decimal[i]]
+                result_after_decimal += '0' * zeros_count
+                # Add the rest of the number after the subscript
+                result_after_decimal += after_decimal[i + 1:]
+                break
+            else:
+                result_after_decimal += after_decimal[i]
+                i += 1
+        
+        # Combine the parts
+        return f"{before_decimal}.{result_after_decimal}"
     
     price = None  # Initialize price variable
     
@@ -98,17 +130,13 @@ async def web_scraping(link, user_agents):
                         price_text = await price_element.inner_text()
                         logging.info(f"Raw price text: {price_text}")
                         
-                        # Remove the dollar sign and convert subscript digits
+                        # Remove the dollar sign and process subscript numbers
                         price_text = price_text.replace('$', '')
-                        for subscript, digit in subscript_map.items():
-                            price_text = price_text.replace(subscript, digit)
+                        processed_price = process_subscript_number(price_text)
                         
-                        try:
-                            price = float(price_text)
-                            logging.info(f"Successfully extracted price: {price}")
-                        except ValueError as e:
-                            logging.error(f"Error converting price text to float: {e}")
-                            price = None
+                        # Store the exact string value without float conversion
+                        price = processed_price
+                        logging.info(f"Successfully extracted price: {price}")
                     else:
                         logging.error("Price element not found within parent")
                 else:
@@ -133,7 +161,6 @@ async def web_scraping(link, user_agents):
     return price
 
 def send_to_GoogleSheet(network_chain, token_address, token_name, pair_name, price, keyfile_path=KEYFILE_PATH, sheet_name=SHEET_NAME):
-    
     try:
         creds = service_account.Credentials.from_service_account_file(keyfile_path, scopes=SCOPES)
     except Exception as e:
@@ -156,15 +183,21 @@ def send_to_GoogleSheet(network_chain, token_address, token_name, pair_name, pri
         # Prepare the range for the new data
         SAMPLE_RANGE_NAME = f'{sheet_name}!A{next_empty_row}:I{next_empty_row}'
 
+        # Format the price with dollar sign while maintaining full precision
+        if price is not None:
+            formatted_price = f"${price}"
+        else:
+            formatted_price = None
+
         # Prepare the data to be inserted
-        values = [[network_chain, token_address, token_name, pair_name, '', '', '', '', price]]
+        values = [[network_chain, token_address, token_name, pair_name, '', '', '', '', formatted_price]]
         body = {"values": values}
 
         # Append the new data
         result = service.spreadsheets().values().append(
             spreadsheetId=SPREADSHEET_ID,
             range=SAMPLE_RANGE_NAME,
-            valueInputOption="RAW",
+            valueInputOption="USER_ENTERED",  # Changed from RAW to USER_ENTERED
             body=body,
         ).execute()
 
