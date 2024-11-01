@@ -11,6 +11,8 @@ import logging
 import asyncio
 import random
 import time
+from datetime import datetime
+
 from fake_useragent import UserAgent
 from playwright.async_api import async_playwright
 from dotenv import load_dotenv
@@ -170,18 +172,32 @@ def send_to_GoogleSheet(network_chain, token_address, token_name, pair_name, pri
     service = build("sheets", "v4", credentials=creds)
 
     try:
-        # Get all values from columns A to I
+        # Get all values from columns A to T
         result = service.spreadsheets().values().get(
             spreadsheetId=SPREADSHEET_ID,
-            range=f'{sheet_name}!A:I'
+            range=f'{sheet_name}!A:T'
         ).execute()
         values = result.get('values', [])
 
-        # Find the first empty row
-        next_empty_row = len(values) + 1
+        # Find the first empty row by looking for the first row without data in column A
+        next_empty_row = 1  # Start from row 1
+        for i, row in enumerate(values, start=1):
+            if not row or not row[0]:  # If row is empty or first column is empty
+                next_empty_row = i
+                break
+        
+        # If no empty row found, use the next row after the last row
+        if next_empty_row == 1 and values:  # If we didn't find an empty row and there is data
+            next_empty_row = len(values) + 1
+
+        # Log the row where we're adding data
+        logging.info(f"Adding new data at row {next_empty_row}")
+
+        # Get current date in day/month/year format
+        current_date = datetime.now().strftime("%m/%d/%Y")
 
         # Prepare the range for the new data
-        SAMPLE_RANGE_NAME = f'{sheet_name}!A{next_empty_row}:I{next_empty_row}'
+        SAMPLE_RANGE_NAME = f'{sheet_name}!A{next_empty_row}:T{next_empty_row}'
 
         # Format the price with dollar sign while maintaining full precision
         if price is not None:
@@ -190,20 +206,32 @@ def send_to_GoogleSheet(network_chain, token_address, token_name, pair_name, pri
             formatted_price = None
 
         # Prepare the data to be inserted
-        values = [[network_chain, token_address, token_name, pair_name, '', '', '', '', formatted_price]]
+        empty_columns = [''] * 10  # 10 empty values for columns J through S
+        
+        values = [[
+            network_chain,           # Column A
+            token_address,          # Column B
+            token_name,             # Column C
+            pair_name,              # Column D
+            '', '', '', '',         # Columns E-H
+            formatted_price,        # Column I
+            *empty_columns,         # Columns J-S
+            current_date            # Column T
+        ]]
+        
         body = {"values": values}
 
-        # Append the new data
-        result = service.spreadsheets().values().append(
+        # Instead of append, use update to insert at specific row
+        result = service.spreadsheets().values().update(
             spreadsheetId=SPREADSHEET_ID,
             range=SAMPLE_RANGE_NAME,
-            valueInputOption="USER_ENTERED",  # Changed from RAW to USER_ENTERED
-            body=body,
+            valueInputOption="USER_ENTERED",
+            body=body
         ).execute()
 
-        updated_cells = result['updates']['updatedRange'].split('!')[1]
-        return updated_cells
+        updated_range = f'{sheet_name}!A{next_empty_row}:T{next_empty_row}'
+        return updated_range
 
     except HttpError as err:
-        print(f"API Error: {err}")
+        logging.error(f"API Error: {err}")
         return None

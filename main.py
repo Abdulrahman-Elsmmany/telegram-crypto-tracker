@@ -90,18 +90,33 @@ async def handle_channel_post(message: types.Message):
     updated_places = send_to_GoogleSheet(blockchain, contract_address, coin_name, pair, price)
 
     try:
-        statement = (f"Working on sending data\n"
+        statement = ("Working on sending data\n"
                      f"The name is: {coin_name}\n\n"
                      f"The address is: {contract_address}\n\n"
                      f"The Chain name is: {blockchain}\n\n")
+        
+        # Handle price formatting properly
         if price is not None:
-            statement += f"The price is: ${price:.8f}\n\n"
+            try:
+                # Convert price to float only if it's not already a float
+                price_float = float(price) if isinstance(price, str) else price
+                statement += f"The price is: ${price_float:.8f}\n\n"
+            except ValueError:
+                # If conversion fails, just display the raw price
+                statement += f"The price is: ${price}\n\n"
         else:
             statement += "Unable to fetch price\n\n"
+            
         statement += f"Data updated in Google Sheet at: {updated_places}"
         await bot.send_message(chat_id=My_Account, text=statement)
     except Exception as e:
-        logging.error(f"Error sending message: {e}")
+        logging.error(f"Error sending message: {str(e)}")
+        # Fallback message in case of formatting error
+        await bot.send_message(
+            chat_id=My_Account, 
+            text=f"Data processed but encountered error in message formatting: {str(e)}\n"
+                 f"Raw price value: {price}"
+        )
 
     try:
         photo = FSInputFile("last.jpg")
