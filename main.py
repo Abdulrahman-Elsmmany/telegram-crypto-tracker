@@ -66,6 +66,9 @@ async def handle_channel_post(message: types.Message):
 
     try:
         data = parse_telegram_message(text)
+        if data is None:
+            # Message doesn't match expected format, silently ignore
+            return
     except Exception as e:
         await bot.send_message(chat_id=My_Account, text=f'parse_telegram_message Failed for "\n\n" {text}')
         return

@@ -39,21 +39,31 @@ def parse_telegram_message(message):
     
     # Extract coin name and symbol
     coin_match = re.search(r'🪙 (.+?) \((\$\w+)\)', message)
-    if coin_match:
-        info['coin_name'] = coin_match.group(1)
-        info['coin_symbol'] = coin_match.group(2)
+    if not coin_match:
+        return None
+    
+    info['coin_name'] = coin_match.group(1)
+    info['coin_symbol'] = coin_match.group(2)
     
     # Extract blockchain
     chain_match = re.search(r'🔗 (\w+)', message)
-    if chain_match:
-        info['blockchain'] = chain_match.group(1)
+    if not chain_match:
+        return None
+    
+    info['blockchain'] = chain_match.group(1)
     
     # Extract contract address
     address_match = re.search(r'CA: (\w+)', message)
-    if address_match:
-        info['contract_address'] = address_match.group(1)
+    if not address_match:
+        return None
     
-    return info
+    info['contract_address'] = address_match.group(1)
+    
+    # Only return the info dictionary if all required fields are present
+    if all(key in info for key in ['coin_name', 'coin_symbol', 'blockchain', 'contract_address']):
+        return info
+    
+    return None
 
 # Generate random count of user agents and return them in a list : user_agents
 def generat_user_agents(count):
