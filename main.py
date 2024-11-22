@@ -22,7 +22,7 @@ from aiogram.exceptions import TelegramAPIError, TelegramServerError, TelegramRe
 from aiogram.types import FSInputFile
 
 
-from helper import parse_telegram_message, generat_user_agents, web_scraping, send_to_GoogleSheet
+from helper import parse_telegram_message, generate_user_agents, web_scraping, send_to_GoogleSheet
 
 # --------------------
 # Logger Setup
@@ -82,7 +82,7 @@ async def handle_channel_post(message: types.Message):
 
     pair = f"({coin_symbol}/WSOL)"
     link = f"https://gmgn.ai/sol/token/{contract_address}"
-    user_agents = generat_user_agents(10)
+    user_agents = generate_user_agents(10)
     
     try:
         price = await web_scraping(link, user_agents)
